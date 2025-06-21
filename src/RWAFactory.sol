@@ -125,7 +125,6 @@ contract RWAFactory is Ownable, ReentrancyGuard {
         RWAVault vault = new RWAVault(
             address(rwaToken),
             msg.sender, // Creator as initial reward distributor
-            defaultTreasury,
             address(this) // Factory as initial owner
         );
 

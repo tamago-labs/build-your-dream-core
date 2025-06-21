@@ -14,8 +14,7 @@ interface IRWAVault {
 
     function deposit(uint256 amount) external;
     function withdraw(uint256 shares) external;
-    function claimRewards() external;
-    function addRewardsFrom(address from, uint256 amount) external;
+    function claimRewards() external; 
     function addRewards(uint256 amount) external;
     function distributeRewardsFromBalance(uint256 amount) external;
     function pendingRewards(address user) external view returns (uint256);

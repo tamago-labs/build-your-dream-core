@@ -50,12 +50,6 @@ contract RWAVault is ReentrancyGuard, Ownable, Pausable {
     /// @notice Minimum lock period in seconds
     uint256 public minLockPeriod = 24 * 60 * 60; // 24 hours
 
-    /// @notice Performance fee percentage (in basis points)
-    uint256 public performanceFee = 200; // 2%
-
-    /// @notice Treasury address for fees
-    address public treasury;
-
     // ---------------------------------------------------------------------
     // ░░ Events ░░
     // ---------------------------------------------------------------------
@@ -63,10 +57,8 @@ contract RWAVault is ReentrancyGuard, Ownable, Pausable {
     event Deposit(address indexed user, uint256 amount, uint256 shares);
     event Withdraw(address indexed user, uint256 shares, uint256 amount);
     event RewardsClaimed(address indexed user, uint256 amount);
-    event RewardsAdded(address indexed from, uint256 amount, uint256 fee, uint256 netRewards);
-    event RewardDistributorSet(address indexed distributor);
-    event PerformanceFeeSet(uint256 fee);
-    event TreasurySet(address indexed treasury);
+    event RewardsAdded(address indexed from, uint256 amount);
+    event RewardDistributorSet(address indexed distributor);  
 
     // ---------------------------------------------------------------------
     // ░░ Modifiers ░░
@@ -83,17 +75,14 @@ contract RWAVault is ReentrancyGuard, Ownable, Pausable {
 
     constructor(
         address _rwaToken,
-        address _rewardDistributor,
-        address _treasury,
+        address _rewardDistributor, 
         address initialOwner
     ) Ownable(initialOwner) {
         require(_rwaToken != address(0), "Invalid RWA token");
-        require(_rewardDistributor != address(0), "Invalid reward distributor");
-        require(_treasury != address(0), "Invalid treasury");
+        require(_rewardDistributor != address(0), "Invalid reward distributor"); 
         
         rwaToken = RWAToken(payable(_rwaToken));
-        rewardDistributor = _rewardDistributor;
-        treasury = _treasury;
+        rewardDistributor = _rewardDistributor; 
     }
 
     // ---------------------------------------------------------------------
@@ -190,60 +179,24 @@ contract RWAVault is ReentrancyGuard, Ownable, Pausable {
         
         emit RewardsClaimed(msg.sender, pending);
     }
-
-    /**
-     * @notice Add rewards to the vault (distributes rewards proportionally to all stakers)
-     * @param from Address to transfer reward tokens from
-     * @param amount Amount of RWA tokens to add as rewards
-     */
-    function addRewardsFrom(address from, uint256 amount) external onlyRewardDistributor nonReentrant {
-        require(amount > 0, "Amount must be positive");
-        require(totalShares > 0, "No stakers to reward");
-        
-        // Transfer reward tokens from specified address
-        rwaToken.transferFrom(from, address(this), amount);
-        
-        // Calculate performance fee
-        uint256 fee = (amount * performanceFee) / 10000;
-        uint256 netRewards = amount - fee;
-        
-        // Send fee to treasury
-        if (fee > 0) {
-            rwaToken.transfer(treasury, fee);
-        }
-        
-        // Update rewards per share
-        accRewardPerShare += (netRewards * PRECISION_FACTOR) / totalShares;
-        totalRewards += netRewards;
-        
-        emit RewardsAdded(from, amount, fee, netRewards);
-    }
+ 
 
     /**
      * @notice Add rewards to the vault (caller pays)
      * @param amount Amount of RWA tokens to add as rewards
      */
-    function addRewards(uint256 amount) external onlyRewardDistributor nonReentrant {
+    function addRewards(uint256 amount) external nonReentrant {
         require(amount > 0, "Amount must be positive");
         require(totalShares > 0, "No stakers to reward");
         
         // Transfer reward tokens from caller
         rwaToken.transferFrom(msg.sender, address(this), amount);
         
-        // Calculate performance fee
-        uint256 fee = (amount * performanceFee) / 10000;
-        uint256 netRewards = amount - fee;
-        
-        // Send fee to treasury
-        if (fee > 0) {
-            rwaToken.transfer(treasury, fee);
-        }
-        
         // Update rewards per share
-        accRewardPerShare += (netRewards * PRECISION_FACTOR) / totalShares;
-        totalRewards += netRewards;
-        
-        emit RewardsAdded(msg.sender, amount, fee, netRewards);
+        accRewardPerShare += (amount * PRECISION_FACTOR) / totalShares;
+        totalRewards += amount;
+
+        emit RewardsAdded(msg.sender, amount);
     }
 
     /**
@@ -257,21 +210,12 @@ contract RWAVault is ReentrancyGuard, Ownable, Pausable {
         uint256 vaultBalance = rwaToken.balanceOf(address(this));
         uint256 availableForRewards = vaultBalance - totalStaked;
         require(availableForRewards >= amount, "Insufficient reward balance");
-        
-        // Calculate performance fee
-        uint256 fee = (amount * performanceFee) / 10000;
-        uint256 netRewards = amount - fee;
-        
-        // Send fee to treasury
-        if (fee > 0) {
-            rwaToken.transfer(treasury, fee);
-        }
-        
+         
         // Update rewards per share
-        accRewardPerShare += (netRewards * PRECISION_FACTOR) / totalShares;
-        totalRewards += netRewards;
+        accRewardPerShare += (amount * PRECISION_FACTOR) / totalShares;
+        totalRewards += amount;
         
-        emit RewardsAdded(address(this), amount, fee, netRewards);
+        emit RewardsAdded(address(this), amount);
     }
 
     // ---------------------------------------------------------------------
@@ -346,18 +290,6 @@ contract RWAVault is ReentrancyGuard, Ownable, Pausable {
         require(_rewardDistributor != address(0), "Invalid distributor");
         rewardDistributor = _rewardDistributor;
         emit RewardDistributorSet(_rewardDistributor);
-    }
-
-    function setPerformanceFee(uint256 _performanceFee) external onlyOwner {
-        require(_performanceFee <= 1000, "Fee too high"); // Max 10%
-        performanceFee = _performanceFee;
-        emit PerformanceFeeSet(_performanceFee);
-    }
-
-    function setTreasury(address _treasury) external onlyOwner {
-        require(_treasury != address(0), "Invalid treasury");
-        treasury = _treasury;
-        emit TreasurySet(_treasury);
     }
 
     function setMinLockPeriod(uint256 _minLockPeriod) external onlyOwner {
