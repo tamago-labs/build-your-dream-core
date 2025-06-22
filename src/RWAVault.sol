@@ -8,337 +8,217 @@ import "./RWAToken.sol";
 
 /**
  * @title RWAVault
- * @notice Vault for staking RWA tokens and earning yield rewards
- * @dev Users stake RWA tokens to earn rewards from real-world asset income
+ * @notice Yield and reward distribution vault for RWA token holders
  */
 contract RWAVault is ReentrancyGuard, Ownable, Pausable {
-
-    // ---------------------------------------------------------------------
-    // ░░ Structs & Storage ░░
-    // ---------------------------------------------------------------------
-
-    struct UserInfo {
-        uint256 shares;           // Share tokens owned by user
-        uint256 rewardDebt;       // Amount of rewards already accounted for
-        uint256 depositTime;     // When user deposited (for lock period)
-    }
-
-    /// @notice RWA token contract
+    
     RWAToken public immutable rwaToken;
-
-    /// @notice Total share tokens issued
-    uint256 public totalShares;
-
-    /// @notice Total RWA tokens staked in vault
+    
+    struct UserStake {
+        uint256 amount;
+        uint256 rewardDebt;
+        uint256 stakedAt;
+    }
+    
+    struct RewardDistribution {
+        uint256 totalAmount;
+        uint256 timestamp;
+        string description;
+    }
+    
+    mapping(address => UserStake) public stakes;
+    RewardDistribution[] public distributions;
+    
     uint256 public totalStaked;
-
-    /// @notice Total rewards available for distribution
-    uint256 public totalRewards;
-
-    /// @notice Accumulated rewards per share (scaled by PRECISION_FACTOR)
     uint256 public accRewardPerShare;
-
-    /// @notice Precision factor for calculations
-    uint256 private constant PRECISION_FACTOR = 1e12;
-
-    /// @notice User information
-    mapping(address => UserInfo) public userInfo;
-
-    /// @notice Reward distributor address (project owner)
+    uint256 public totalRewardsDistributed;
+    uint256 public minStakeAmount = 100 * 1e18;
+    uint256 public stakingFee = 25; // 0.25%
+    
     address public rewardDistributor;
-
-    /// @notice Minimum lock period in seconds
-    uint256 public minLockPeriod = 24 * 60 * 60; // 24 hours
-
-    // ---------------------------------------------------------------------
-    // ░░ Events ░░
-    // ---------------------------------------------------------------------
-
-    event Deposit(address indexed user, uint256 amount, uint256 shares);
-    event Withdraw(address indexed user, uint256 shares, uint256 amount);
+    
+    event Staked(address indexed user, uint256 amount);
+    event Unstaked(address indexed user, uint256 amount, uint256 rewards);
     event RewardsClaimed(address indexed user, uint256 amount);
-    event RewardsAdded(address indexed from, uint256 amount);
-    event RewardDistributorSet(address indexed distributor);  
-
-    // ---------------------------------------------------------------------
-    // ░░ Modifiers ░░
-    // ---------------------------------------------------------------------
-
-    modifier onlyRewardDistributor() {
-        require(msg.sender == rewardDistributor || msg.sender == owner(), "Not reward distributor");
+    event RewardsDistributed(uint256 amount, string description);
+    
+    error InsufficientStakeAmount();
+    error NoStakeFound();
+    error InsufficientStaked();
+    error NotDistributor();
+    error NoRewards();
+    
+    modifier onlyDistributor() {
+        if (msg.sender != rewardDistributor && msg.sender != owner()) revert NotDistributor();
         _;
     }
-
-    // ---------------------------------------------------------------------
-    // ░░ Constructor ░░
-    // ---------------------------------------------------------------------
-
+    
     constructor(
         address _rwaToken,
-        address _rewardDistributor, 
-        address initialOwner
-    ) Ownable(initialOwner) {
-        require(_rwaToken != address(0), "Invalid RWA token");
-        require(_rewardDistributor != address(0), "Invalid reward distributor"); 
-        
-        rwaToken = RWAToken(payable(_rwaToken));
-        rewardDistributor = _rewardDistributor; 
+        address _owner
+    ) Ownable(_owner) {
+        rwaToken = RWAToken(_rwaToken);
+        rewardDistributor = _owner;
     }
-
-    // ---------------------------------------------------------------------
-    // ░░ Main Functions ░░
-    // ---------------------------------------------------------------------
-
-    /**
-     * @notice Deposit RWA tokens and receive share tokens
-     * @param amount Amount of RWA tokens to deposit
-     */
-    function deposit(uint256 amount) external nonReentrant whenNotPaused {
-        require(amount > 0, "Amount must be positive");
+    
+    function stake(uint256 amount) external nonReentrant whenNotPaused {
+        if (amount < minStakeAmount) revert InsufficientStakeAmount();
         
-        UserInfo storage user = userInfo[msg.sender];
-        
-        // Transfer RWA tokens from user
-        rwaToken.transferFrom(msg.sender, address(this), amount);
-        
-        // Calculate shares to mint
-        uint256 shares;
-        if (totalShares == 0) {
-            shares = amount;
-        } else {
-            shares = (amount * totalShares) / totalStaked;
-        }
+        UserStake storage userStake = stakes[msg.sender];
         
         // Claim pending rewards first
-        if (user.shares > 0) {
-            uint256 pending = pendingRewards(msg.sender);
-            if (pending > 0) {
-                _safeRewardTransfer(msg.sender, pending);
-                emit RewardsClaimed(msg.sender, pending);
-            }
+        if (userStake.amount > 0) {
+            _claimRewards(msg.sender);
         }
         
-        // Update user info
-        user.shares += shares;
-        user.depositTime = block.timestamp;
-        user.rewardDebt = (user.shares * accRewardPerShare) / PRECISION_FACTOR;
+        // Calculate fee
+        uint256 fee = (amount * stakingFee) / 10000;
+        uint256 stakeAmount = amount - fee;
         
-        // Update totals
-        totalShares += shares;
-        totalStaked += amount;
-        
-        emit Deposit(msg.sender, amount, shares);
-    }
-
-    /**
-     * @notice Withdraw RWA tokens by burning share tokens
-     * @param shares Amount of share tokens to burn
-     */
-    function withdraw(uint256 shares) external nonReentrant {
-        require(shares > 0, "Shares must be positive");
-        
-        UserInfo storage user = userInfo[msg.sender];
-        require(user.shares >= shares, "Insufficient shares");
-        require(block.timestamp >= user.depositTime + minLockPeriod, "Still locked");
-        
-        // Calculate RWA tokens to return
-        uint256 amount = (shares * totalStaked) / totalShares;
-        
-        // Claim pending rewards
-        uint256 pending = pendingRewards(msg.sender);
-        if (pending > 0) {
-            _safeRewardTransfer(msg.sender, pending);
-            emit RewardsClaimed(msg.sender, pending);
-        }
-        
-        // Update user info
-        user.shares -= shares;
-        user.rewardDebt = (user.shares * accRewardPerShare) / PRECISION_FACTOR;
-        
-        // Update totals
-        totalShares -= shares;
-        totalStaked -= amount;
-        
-        // Transfer RWA tokens back to user
-        rwaToken.transfer(msg.sender, amount);
-        
-        emit Withdraw(msg.sender, shares, amount);
-    }
-
-    /**
-     * @notice Claim pending rewards without withdrawing
-     */
-    function claimRewards() external nonReentrant {
-        UserInfo storage user = userInfo[msg.sender];
-        uint256 pending = pendingRewards(msg.sender);
-        
-        require(pending > 0, "No pending rewards");
-        
-        user.rewardDebt = (user.shares * accRewardPerShare) / PRECISION_FACTOR;
-        _safeRewardTransfer(msg.sender, pending);
-        
-        emit RewardsClaimed(msg.sender, pending);
-    }
- 
-
-    /**
-     * @notice Add rewards to the vault (caller pays)
-     * @param amount Amount of RWA tokens to add as rewards
-     */
-    function addRewards(uint256 amount) external nonReentrant {
-        require(amount > 0, "Amount must be positive");
-        require(totalShares > 0, "No stakers to reward");
-        
-        // Transfer reward tokens from caller
+        // Transfer tokens
         rwaToken.transferFrom(msg.sender, address(this), amount);
         
-        // Update rewards per share
-        accRewardPerShare += (amount * PRECISION_FACTOR) / totalShares;
-        totalRewards += amount;
-
-        emit RewardsAdded(msg.sender, amount);
-    }
-
-    /**
-     * @notice Simplified reward addition - project can directly send tokens to vault
-     * @param amount Amount of rewards to distribute to stakers
-     */
-    function distributeRewardsFromBalance(uint256 amount) external onlyRewardDistributor {
-        require(amount > 0, "Amount must be positive");
-        require(totalShares > 0, "No stakers to reward");
+        // Update stake
+        userStake.amount += stakeAmount;
+        userStake.rewardDebt = (userStake.amount * accRewardPerShare) / 1e12;
+        userStake.stakedAt = block.timestamp;
         
-        uint256 vaultBalance = rwaToken.balanceOf(address(this));
-        uint256 availableForRewards = vaultBalance - totalStaked;
-        require(availableForRewards >= amount, "Insufficient reward balance");
-         
-        // Update rewards per share
-        accRewardPerShare += (amount * PRECISION_FACTOR) / totalShares;
-        totalRewards += amount;
+        totalStaked += stakeAmount;
         
-        emit RewardsAdded(address(this), amount);
-    }
-
-    // ---------------------------------------------------------------------
-    // ░░ View Functions ░░
-    // ---------------------------------------------------------------------
-
-    /**
-     * @notice Get pending rewards for a user
-     * @param user User address
-     * @return Pending reward amount
-     */
-    function pendingRewards(address user) public view returns (uint256) {
-        UserInfo memory userInfo_ = userInfo[user];
-        return (userInfo_.shares * accRewardPerShare) / PRECISION_FACTOR - userInfo_.rewardDebt;
-    }
-
-    /**
-     * @notice Get user's staked RWA token amount
-     * @param user User address
-     * @return RWA token amount
-     */
-    function getUserTokenAmount(address user) external view returns (uint256) {
-        UserInfo memory userInfo_ = userInfo[user];
-        if (totalShares == 0) return 0;
-        return (userInfo_.shares * totalStaked) / totalShares;
-    }
-
-    /**
-     * @notice Get share price (RWA tokens per share)
-     * @return Share price
-     */
-    function getSharePrice() external view returns (uint256) {
-        if (totalShares == 0) return 1e18;
-        return (totalStaked * 1e18) / totalShares;
-    }
-
-    /**
-     * @notice Get vault APY based on recent rewards (estimated)
-     * @return APY in basis points
-     */
-    function getAPY() external view returns (uint256) {
-        if (totalStaked == 0 || totalRewards == 0) return 0;
+        // Send fee to owner
+        if (fee > 0) {
+            rwaToken.transfer(owner(), fee);
+        }
         
-        // Simple APY calculation - this would need more sophisticated calculation in production
-        // based on time periods and reward frequency
-        return (totalRewards * 10000) / totalStaked; // Return in basis points
+        emit Staked(msg.sender, stakeAmount);
     }
-
-    /**
-     * @notice Check if user can withdraw (lock period expired)
-     * @param user User address
-     * @return True if user can withdraw
-     */
-    function canWithdraw(address user) external view returns (bool) {
-        return block.timestamp >= userInfo[user].depositTime + minLockPeriod;
+    
+    function unstake(uint256 amount) external nonReentrant {
+        UserStake storage userStake = stakes[msg.sender];
+        
+        if (userStake.amount == 0) revert NoStakeFound();
+        if (amount > userStake.amount) revert InsufficientStaked();
+        
+        // Claim rewards first
+        uint256 rewards = _claimRewards(msg.sender);
+        
+        // Update stake
+        userStake.amount -= amount;
+        userStake.rewardDebt = (userStake.amount * accRewardPerShare) / 1e12;
+        
+        totalStaked -= amount;
+        
+        // Transfer tokens back
+        rwaToken.transfer(msg.sender, amount);
+        
+        emit Unstaked(msg.sender, amount, rewards);
     }
-
-    /**
-     * @notice Get available reward balance (tokens in vault not staked)
-     * @return Available reward balance
-     */
-    function getAvailableRewardBalance() external view returns (uint256) {
-        uint256 vaultBalance = rwaToken.balanceOf(address(this));
-        return vaultBalance > totalStaked ? vaultBalance - totalStaked : 0;
+    
+    function claimRewards() external nonReentrant {
+        uint256 rewards = _claimRewards(msg.sender);
+        if (rewards == 0) revert NoRewards();
+        
+        emit RewardsClaimed(msg.sender, rewards);
     }
-
-    // ---------------------------------------------------------------------
-    // ░░ Admin Functions ░░
-    // ---------------------------------------------------------------------
-
-    function setRewardDistributor(address _rewardDistributor) external onlyOwner {
-        require(_rewardDistributor != address(0), "Invalid distributor");
-        rewardDistributor = _rewardDistributor;
-        emit RewardDistributorSet(_rewardDistributor);
+    
+    function _claimRewards(address user) internal returns (uint256 rewards) {
+        UserStake storage userStake = stakes[user];
+        
+        if (userStake.amount == 0) return 0;
+        
+        uint256 pending = (userStake.amount * accRewardPerShare) / 1e12 - userStake.rewardDebt;
+        
+        if (pending > 0) {
+            // Transfer ETH rewards
+            payable(user).transfer(pending);
+            rewards = pending;
+        }
+        
+        userStake.rewardDebt = (userStake.amount * accRewardPerShare) / 1e12;
     }
-
-    function setMinLockPeriod(uint256 _minLockPeriod) external onlyOwner {
-        minLockPeriod = _minLockPeriod;
+    
+    function distributeRewards(string memory description) external payable onlyDistributor {
+        require(msg.value > 0, "No rewards to distribute");
+        require(totalStaked > 0, "No stakers");
+        
+        accRewardPerShare += (msg.value * 1e12) / totalStaked;
+        totalRewardsDistributed += msg.value;
+        
+        distributions.push(RewardDistribution({
+            totalAmount: msg.value,
+            timestamp: block.timestamp,
+            description: description
+        }));
+        
+        emit RewardsDistributed(msg.value, description);
     }
-
+    
+    function getPendingRewards(address user) external view returns (uint256) {
+        UserStake storage userStake = stakes[user];
+        
+        if (userStake.amount == 0) return 0;
+        
+        return (userStake.amount * accRewardPerShare) / 1e12 - userStake.rewardDebt;
+    }
+    
+    function getUserStakeInfo(address user) external view returns (
+        uint256 stakedAmount,
+        uint256 pendingRewards,
+        uint256 stakedAt
+    ) {
+        UserStake storage userStake = stakes[user];
+        
+        stakedAmount = userStake.amount;
+        pendingRewards = (userStake.amount * accRewardPerShare) / 1e12 - userStake.rewardDebt;
+        stakedAt = userStake.stakedAt;
+    }
+    
+    function getDistributionHistory() external view returns (RewardDistribution[] memory) {
+        return distributions;
+    }
+    
+    function getVaultStats() external view returns (
+        uint256 totalStakedTokens,
+        uint256 totalRewards,
+        uint256 distributionCount,
+        uint256 stakingFeePercent
+    ) {
+        totalStakedTokens = totalStaked;
+        totalRewards = totalRewardsDistributed;
+        distributionCount = distributions.length;
+        stakingFeePercent = stakingFee;
+    }
+    
+    function updateMinStakeAmount(uint256 newMin) external onlyOwner {
+        minStakeAmount = newMin;
+    }
+    
+    function updateStakingFee(uint256 newFee) external onlyOwner {
+        require(newFee <= 1000, "Fee too high"); // Max 10%
+        stakingFee = newFee;
+    }
+    
+    function updateRewardDistributor(address newDistributor) external onlyOwner {
+        require(newDistributor != address(0), "Invalid distributor");
+        rewardDistributor = newDistributor;
+    }
+    
     function pause() external onlyOwner {
         _pause();
     }
-
+    
     function unpause() external onlyOwner {
         _unpause();
     }
-
-    // ---------------------------------------------------------------------
-    // ░░ Internal Functions ░░
-    // ---------------------------------------------------------------------
-
-    function _safeRewardTransfer(address to, uint256 amount) internal {
-        uint256 balance = rwaToken.balanceOf(address(this));
-        uint256 availableRewards = balance - totalStaked;
-        
-        if (amount > availableRewards) {
-            rwaToken.transfer(to, availableRewards);
-        } else {
-            rwaToken.transfer(to, amount);
+    
+    function emergencyWithdraw() external onlyOwner {
+        uint256 balance = address(this).balance;
+        if (balance > 0) {
+            payable(owner()).transfer(balance);
         }
     }
-
-    // ---------------------------------------------------------------------
-    // ░░ Emergency Functions ░░
-    // ---------------------------------------------------------------------
-
-    function emergencyWithdraw() external nonReentrant {
-        UserInfo storage user = userInfo[msg.sender];
-        uint256 amount = (user.shares * totalStaked) / totalShares;
-        
-        totalShares -= user.shares;
-        totalStaked -= amount;
-        
-        user.shares = 0;
-        user.rewardDebt = 0;
-        
-        rwaToken.transfer(msg.sender, amount);
-        
-        emit Withdraw(msg.sender, user.shares, amount);
-    }
-
-    function emergencyRewardWithdraw(uint256 amount) external onlyOwner {
-        rwaToken.transfer(owner(), amount);
+    
+    receive() external payable {
+        // Allow direct ETH deposits for rewards
     }
 }

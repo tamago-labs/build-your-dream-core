@@ -2,300 +2,417 @@
 pragma solidity ^0.8.20;
 
 import "forge-std/Test.sol";
-import "../src/RWAToken.sol";
 import "../src/RWAFactory.sol";
-import "../src/RWAOrderbook.sol";
+import "../src/RWAToken.sol";
+import "../src/RWAPrimarySales.sol";
+import "../src/RWARFQ.sol";
 import "../src/RWAVault.sol";
+import "../src/RWADashboard.sol";
 
-/**
- * @title RWAIntegrationTest
- * @notice Integration tests showing the complete RWA tokenization flow
- */
 contract RWAIntegrationTest is Test {
+    
     RWAFactory public factory;
-    RWAToken public rwaToken;
-    RWAOrderbook public orderbook;
-    RWAVault public vault;
+    RWADashboard public dashboard;
     
-    address public factoryOwner = address(0x1);
-    address public projectCreator = address(0x2);
-    address public projectWallet = address(0x3);
-    address public trader1 = address(0x4);
-    address public trader2 = address(0x5);
-    address public feeRecipient = address(0x6);
-    address public treasury = address(0x7);
+    address public owner = address(0x1);
+    address public treasury = address(0x2);
+    address public feeRecipient = address(0x3);
+    address public projectWallet = address(0x4);
+    address public user1 = address(0x5);
+    address public user2 = address(0x6);
     
-    uint256 public constant INITIAL_PRICE = 0.01 ether; // 0.01 ETH per token
+    uint256 public constant CREATION_FEE = 0.1 ether;
     
     function setUp() public {
-        // Setup accounts with ETH
-        vm.deal(factoryOwner, 100 ether);
-        vm.deal(projectCreator, 50 ether);
-        vm.deal(projectWallet, 10 ether);
-        vm.deal(trader1, 20 ether);
-        vm.deal(trader2, 20 ether);
+        vm.startPrank(owner);
         
-        // Deploy factory
-        vm.prank(factoryOwner);
-        factory = new RWAFactory(
-            feeRecipient,
-            treasury,
-            factoryOwner
-        );
+        factory = new RWAFactory(feeRecipient, treasury, owner);
+        dashboard = new RWADashboard(address(factory));
+        
+        vm.stopPrank();
+        
+        // Fund test accounts
+        vm.deal(user1, 100 ether);
+        vm.deal(user2, 100 ether);
+        vm.deal(projectWallet, 10 ether);
     }
     
-    function testCompleteRWAFlow() public {
-        // 1. Create RWA project
+    function testCreateRWAProject() public {
         RWAToken.AssetMetadata memory metadata = RWAToken.AssetMetadata({
             assetType: "real-estate",
-            description: "Premium office building in Tokyo",
-            totalValue: 50_000_000 * 10**8, // $50M
-            url: "https://example.com/tokyo-office",
-            createdAt: 0
+            description: "Luxury apartment building in NYC",
+            totalValue: 50_000_000 * 1e8, // $50M with 8 decimals
+            url: "https://example.com/property",
+            createdAt: 0 // Will be set by contract
         });
         
-        vm.prank(projectCreator);
-        uint256 projectId = factory.createRWAProject(
-            "Tokyo Office Token",
-            "TOT",
+        vm.startPrank(user1);
+        vm.deal(user1, 1 ether);
+        
+        uint256 projectId = factory.createRWAProject{value: CREATION_FEE}(
+            "NYC Real Estate Token",
+            "NYCRE",
             metadata,
             projectWallet,
-            10, // 10% to project, 90% to liquidity
-            INITIAL_PRICE
+            20, // 20% to project
+            0.001 ether // 0.001 ETH per token
         );
         
-        // Get deployed contracts
+        vm.stopPrank();
+        
+        assertEq(projectId, 1);
+        
         RWAFactory.RWAProject memory project = factory.getProject(projectId);
-        rwaToken = RWAToken(payable(project.rwaToken));
-        orderbook = RWAOrderbook(payable(project.orderbook));
-        vault = RWAVault(project.vault);
-        
-        // 2. Verify initial state
-        assertEq(rwaToken.name(), "Tokyo Office Token");
-        assertEq(rwaToken.symbol(), "TOT");
-        assertEq(rwaToken.projectWallet(), projectWallet);
-        assertEq(rwaToken.projectAllocationPercent(), 10);
-        
-        // Project should have 10% of tokens
-        uint256 totalSupply = rwaToken.totalSupply();
-        uint256 expectedProjectTokens = (totalSupply * 10) / 100;
-        assertEq(rwaToken.balanceOf(projectWallet), expectedProjectTokens);
-        
-        // Orderbook should have liquidity tokens
-        uint256 expectedLiquidityTokens = totalSupply - expectedProjectTokens;
-        assertEq(rwaToken.balanceOf(address(orderbook)), expectedLiquidityTokens);
-        
-        // Verify initial liquidity allocation tracking
-        assertEq(rwaToken.getInitialLiquidityAllocation(), expectedLiquidityTokens);
-        assertEq(rwaToken.getAvailableLiquidityTokens(), 0); // All transferred to orderbook
-        
-        // 3. Test trading - Buy tokens
-        uint256 buyAmount = 1000 * 10**18; // Buy 1000 tokens
-        uint256 totalCost = (buyAmount * INITIAL_PRICE) / 1e18;
-        
-        vm.prank(trader1);
-        orderbook.placeBuyOrder{value: totalCost}(buyAmount, INITIAL_PRICE);
-        
-        // Trader1 should have received tokens
-        assertGt(rwaToken.balanceOf(trader1), 0);
-        console.log("Trader1 RWA balance:", rwaToken.balanceOf(trader1));
-
-        // 4. Test vault staking
-        uint256 stakeAmount = rwaToken.balanceOf(trader1) / 2;
-        
-        vm.startPrank(trader1);
-        rwaToken.transfer(trader2, 100 * 10**18);
-        rwaToken.approve(address(vault), stakeAmount);
-        vault.deposit(stakeAmount);
-        vm.stopPrank();
-        
-        // Check vault state
-        (uint256 shares, uint256 rewardDebt, uint256 depositTime) = vault.userInfo(trader1);
-        assertGt(shares, 0);
-        assertEq(vault.getUserTokenAmount(trader1), stakeAmount);
-        
-        // 5. Test project distributing rewards
-        uint256 rewardAmount = 1000 * 10**18;
-        
-        vm.startPrank(projectWallet);
-        rwaToken.approve(address(vault), rewardAmount);
-        vault.addRewards(rewardAmount);
-        vm.stopPrank();
-        
-        // 6. Test claiming rewards
-        uint256 pendingRewards = vault.pendingRewards(trader1);
-        assertGt(pendingRewards, 0);
-        
-        vm.prank(trader1);
-        vault.claimRewards(); 
-        vm.stopPrank();
-        
-        // 7. Test selling tokens
-        uint256 sellAmount = 100 * 10**18;
-        uint256 sellPrice = INITIAL_PRICE + (INITIAL_PRICE / 10); // 10% higher
-        
-        vm.startPrank(trader2);
-        rwaToken.approve(address(orderbook), sellAmount);
-        orderbook.placeSellOrder(sellAmount, sellPrice);
-        vm.stopPrank();
-        
-        // 8. Test asset metadata update
-        RWAToken.AssetMetadata memory newMetadata = metadata;
-        newMetadata.totalValue = 55_000_000 * 10**8; // $55M (10% increase)
-        newMetadata.description = "Premium office building in Tokyo - Recently renovated";
-        
-        vm.prank(projectCreator);
-        rwaToken.updateAssetMetadata(newMetadata);
-        
-        // Verify update
-        (, string memory updatedDescription, uint256 updatedTotalValue, ,) = rwaToken.assetData();
-        assertEq(updatedTotalValue, 55_000_000 * 10**8);
-        assertEq(updatedDescription, "Premium office building in Tokyo - Recently renovated");
-        
-        // 9. Verify final state
-        console.log("=== Final State ===");
-        console.log("Total Supply:", rwaToken.totalSupply());
-        console.log("Project Balance:", rwaToken.balanceOf(projectWallet));
-        console.log("Trader1 Balance:", rwaToken.balanceOf(trader1));
-        console.log("Vault Total Staked:", vault.totalStaked());
-        console.log("Asset Market Cap:", rwaToken.getMarketCap());
-        console.log("Price Per Token:", rwaToken.getPricePerToken());
-        
-        // Verify invariants
-        assertTrue(rwaToken.totalSupply() > 0);
-        assertTrue(rwaToken.getMarketCap() > 0);
-        assertTrue(rwaToken.getPricePerToken() > 0);
+        assertEq(project.creator, user1);
+        assertTrue(project.isActive);
+        assertTrue(project.rwaToken != address(0));
+        assertTrue(project.primarySales != address(0));
+        assertTrue(project.rfq != address(0));
+        assertTrue(project.vault != address(0));
     }
     
-    function testMultipleProjectCreation() public {
-        // Create multiple RWA projects to test factory functionality
+    function testPrimaryTradingFlow() public {
+        // Create project
+        uint256 projectId = _createTestProject();
+        RWAFactory.RWAProject memory project = factory.getProject(projectId);
         
-        // Project 1: Real Estate
-        RWAToken.AssetMetadata memory realEstateMetadata = RWAToken.AssetMetadata({
-            assetType: "real-estate",
-            description: "Shopping mall in Seoul",
-            totalValue: 30_000_000 * 10**8,
-            url: "https://example.com/seoul-mall",
-            createdAt: 0
-        });
+        RWAPrimarySales sales = RWAPrimarySales(project.primarySales);
+        RWAToken token = RWAToken(project.rwaToken);
         
-        vm.prank(projectCreator);
-        uint256 project1Id = factory.createRWAProject(
-            "Seoul Mall Token",
-            "SMT",
-            realEstateMetadata,
-            projectWallet,
-            15, // 15% allocation
-            0.02 ether
-        );
+        // Whitelist user
+        vm.prank(user1);
+        address[] memory users = new address[](1);
+        users[0] = user2;
+        sales.whitelistUsers(users, true);
         
-        // Project 2: Art
-        RWAToken.AssetMetadata memory artMetadata = RWAToken.AssetMetadata({
-            assetType: "art",
-            description: "Contemporary art collection",
-            totalValue: 5_000_000 * 10**8,
-            url: "https://example.com/art-collection",
-            createdAt: 0
-        });
+        // User purchases tokens
+        vm.startPrank(user2);
+        uint256 purchaseAmount = 10 ether;
+        sales.purchaseTokens{value: purchaseAmount}();
         
-        vm.prank(projectCreator);
-        uint256 project2Id = factory.createRWAProject(
-            "Art Collection Token",
-            "ACT",
-            artMetadata,
-            projectWallet,
-            25, // 25% allocation
-            0.005 ether
-        );
+        uint256 expectedTokens = sales.getTokensForETH(purchaseAmount);
+        assertEq(token.balanceOf(user2), expectedTokens);
+        assertEq(sales.purchased(user2), purchaseAmount);
         
-        // Verify both projects exist
-        RWAFactory.RWAProject memory project1 = factory.getProject(project1Id);
-        RWAFactory.RWAProject memory project2 = factory.getProject(project2Id);
-        
-        assertEq(project1.creator, projectCreator);
-        assertEq(project2.creator, projectCreator);
-        assertTrue(project1.isActive);
-        assertTrue(project2.isActive);
-        
-        // Check tokens
-        RWAToken token1 = RWAToken(payable(project1.rwaToken));
-        RWAToken token2 = RWAToken(payable(project2.rwaToken));
-        
-        assertEq(token1.name(), "Seoul Mall Token");
-        assertEq(token2.name(), "Art Collection Token");
-        assertEq(token1.projectAllocationPercent(), 15);
-        assertEq(token2.projectAllocationPercent(), 25);
-        
-        // Verify creator projects mapping
-        uint256[] memory creatorProjects = factory.getCreatorProjects(projectCreator);
-        assertEq(creatorProjects.length, 2);
-        assertEq(creatorProjects[0], project1Id);
-        assertEq(creatorProjects[1], project2Id);
-        
-        console.log("=== Multiple Projects Test ===");
-        console.log("Project 1 ID:", project1Id);
-        console.log("Project 1 Token:", project1.rwaToken);
-        console.log("Project 2 ID:", project2Id);
-        console.log("Project 2 Token:", project2.rwaToken);
+        vm.stopPrank();
     }
     
-    function testErrorConditions() public {
-        // Test various error conditions
+    function testRFQTrading() public {
+        console.log("=== Starting RFQ Trading Test ===");
+        uint256 projectId = _createTestProject();
+        console.log("Project created with ID:", projectId);
         
+        RWAFactory.RWAProject memory project = factory.getProject(projectId);
+        console.log("Got project data");
+        
+        RWARFQ rfq = RWARFQ(project.rfq);
+        RWAToken token = RWAToken(project.rwaToken);
+        console.log("RFQ address:", address(rfq));
+        console.log("Token address:", address(token));
+        
+        // First give users some tokens
+        console.log("Setting up token balances...");
+        _setupTokenBalances(project, user1, user2);
+        
+        uint256 user1Balance = token.balanceOf(user1);
+        uint256 user2Balance = token.balanceOf(user2);
+        console.log("User1 token balance:", user1Balance);
+        console.log("User2 token balance:", user2Balance);
+        
+        // User1 submits sell quote
+        console.log("User1 submitting sell quote...");
+        vm.startPrank(user1);
+        uint256 sellAmount = 1000 * 1e18;
+        uint256 pricePerToken = 0.002 ether;
+        
+        console.log("Sell amount:", sellAmount);
+        console.log("Price per token:", pricePerToken);
+        
+        if (user1Balance < sellAmount) {
+            console.log("ERROR: User1 doesn't have enough tokens!");
+            console.log("Required:", sellAmount);
+            console.log("Available:", user1Balance);
+            revert("Insufficient tokens for test");
+        }
+        
+        console.log("Approving RFQ to spend tokens...");
+        token.approve(address(rfq), sellAmount);
+        
+        console.log("Submitting quote...");
+        try rfq.submitQuote(
+            false, // selling
+            sellAmount,
+            pricePerToken,
+            1 hours,
+            "Selling 1000 tokens"
+        ) {
+            console.log("Quote submitted successfully");
+        } catch Error(string memory reason) {
+            console.log("Quote submission failed:", reason);
+            revert(reason);
+        }
+        vm.stopPrank();
+        
+        // Check if quote exists
+        try rfq.quotes(0) returns (
+            address maker,
+            bool isBuyQuote,
+            uint256 amount,
+            uint256 pricePerToken,
+            uint256 expiry,
+            bool isActive,
+            string memory description
+        ) {
+            console.log("Quote created - ID: 0");
+            console.log("Quote maker:", maker);
+            console.log("Quote amount:", amount);
+            console.log("Quote active:", isActive);
+        } catch {
+            console.log("ERROR: Quote 0 does not exist!");
+            revert("Quote was not created");
+        }
+        
+        // User2 accepts the quote
+        console.log("User2 accepting quote...");
+        vm.startPrank(user2);
+        uint256 user2BalanceBefore = token.balanceOf(user2);
+        uint256 totalCost = (sellAmount * pricePerToken) / 1e18;
+        
+        console.log("Total cost for user2:", totalCost);
+        console.log("User2 ETH balance:", user2.balance);
+        
+        if (user2.balance < totalCost) {
+            console.log("ERROR: User2 doesn't have enough ETH!");
+            console.log("Required:", totalCost);
+            console.log("Available:", user2.balance);
+            revert("Insufficient ETH for test");
+        }
+        
+        try rfq.acceptQuote{value: totalCost}(0) {
+            console.log("Quote accepted successfully");
+        } catch Error(string memory reason) {
+            console.log("Quote acceptance failed:", reason);
+            revert(reason);
+        }
+        
+        uint256 user2BalanceAfter = token.balanceOf(user2);
+        console.log("User2 balance before:", user2BalanceBefore);
+        console.log("User2 balance after:", user2BalanceAfter);
+        console.log("Expected increase:", sellAmount);
+        
+        assertEq(user2BalanceAfter - user2BalanceBefore, sellAmount);
+        console.log("=== RFQ Trading Test Completed ===");
+        vm.stopPrank();
+    }
+    
+    function testVaultStaking() public {
+        console.log("=== Starting Vault Staking Test ===");
+        uint256 projectId = _createTestProject();
+        console.log("Project created with ID:", projectId);
+        
+        RWAFactory.RWAProject memory project = factory.getProject(projectId);
+        console.log("Got project data");
+        
+        RWAVault vault = RWAVault(payable(project.vault));
+        RWAToken token = RWAToken(project.rwaToken);
+        console.log("Vault address:", address(vault));
+        console.log("Token address:", address(token));
+        console.log("Vault owner:", vault.owner());
+        console.log("Vault reward distributor:", vault.rewardDistributor());
+        console.log("User1 address:", user1);
+        
+        // Give user tokens
+        console.log("Setting up token balances...");
+        _setupTokenBalances(project, user1, user2);
+        
+        uint256 user1Balance = token.balanceOf(user1);
+        console.log("User1 token balance:", user1Balance);
+        
+        // User stakes tokens first
+        console.log("User1 staking tokens...");
+        vm.startPrank(user1);
+        uint256 stakeAmount = 1000 * 1e18;
+        console.log("Stake amount:", stakeAmount);
+        
+        if (user1Balance < stakeAmount) {
+            console.log("ERROR: User1 doesn't have enough tokens to stake!");
+            console.log("Required:", stakeAmount);
+            console.log("Available:", user1Balance);
+            revert("Insufficient tokens for staking test");
+        }
+        
+        console.log("Approving vault to spend tokens...");
+        token.approve(address(vault), stakeAmount);
+        
+        console.log("Calling vault.stake()...");
+        try vault.stake(stakeAmount) {
+            console.log("Stake successful");
+        } catch Error(string memory reason) {
+            console.log("Stake failed:", reason);
+            revert(reason);
+        }
+        
+        (uint256 stakedAmount,,) = vault.getUserStakeInfo(user1);
+        console.log("Staked amount:", stakedAmount);
+        assertTrue(stakedAmount > 0);
+        
+        uint256 totalStaked = vault.totalStaked();
+        console.log("Total staked in vault:", totalStaked);
+        
+        // Now distribute rewards (user1 is project creator and vault owner)
+        console.log("Distributing rewards...");
+        vm.deal(user1, 10 ether);
+        console.log("User1 ETH balance:", user1.balance);
+        
+        try vault.distributeRewards{value: 1 ether}("Q1 2024 rental income") {
+            console.log("Rewards distributed successfully");
+        } catch Error(string memory reason) {
+            console.log("Rewards distribution failed:", reason);
+            revert(reason);
+        }
+        vm.stopPrank();
+        
+        // Check pending rewards
+        console.log("Checking pending rewards...");
+        uint256 pendingRewards = vault.getPendingRewards(user1);
+        console.log("Pending rewards:", pendingRewards);
+        assertTrue(pendingRewards > 0);
+        
+        // Claim rewards
+        console.log("Claiming rewards...");
+        vm.prank(user1);
+        try vault.claimRewards() {
+            console.log("Rewards claimed successfully");
+        } catch Error(string memory reason) {
+            console.log("Claim rewards failed:", reason);
+            revert(reason);
+        }
+        
+        console.log("=== Vault Staking Test Completed ===");
+    }
+    
+    function testDashboardIntegration() public {
+        uint256 projectId = _createTestProject();
+        
+        // Get project overview
+        RWADashboard.ProjectOverview memory overview = dashboard.getProjectOverview(projectId);
+        
+        assertEq(overview.projectId, projectId);
+        assertEq(overview.creator, user1);
+        assertTrue(overview.isActive);
+        assertEq(overview.name, "Test RWA Token");
+        assertEq(overview.symbol, "TRWA");
+        assertEq(overview.assetType, "real-estate");
+        
+        // Get user data
+        RWADashboard.UserProjectData memory userData = dashboard.getUserProjectData(projectId, user2);
+        
+        // Initially user should have no data
+        assertEq(userData.tokenBalance, 0);
+        assertEq(userData.purchasedAmount, 0);
+        assertFalse(userData.isWhitelisted);
+    }
+    
+    function testFactoryStats() public {
+        _createTestProject();
+        _createTestProject();
+        
+        (uint256 totalProjects, uint256 creationFee, address feeRec, address treas) = dashboard.getFactoryStats();
+        
+        assertEq(totalProjects, 2);
+        assertEq(creationFee, CREATION_FEE);
+        assertEq(feeRec, feeRecipient);
+        assertEq(treas, treasury);
+    }
+    
+    function _createTestProject() internal returns (uint256) {
         RWAToken.AssetMetadata memory metadata = RWAToken.AssetMetadata({
             assetType: "real-estate",
             description: "Test property",
-            totalValue: 1_000_000 * 10**8,
-            url: "https://example.com/test",
+            totalValue: 10_000_000 * 1e8,
+            url: "https://test.com",
             createdAt: 0
         });
         
-        // Should fail with empty name
-        vm.expectRevert("Name required");
-        vm.prank(projectCreator);
-        factory.createRWAProject(
-            "",
-            "TEST",
+        vm.startPrank(user1);
+        // Give user1 enough ETH for creation fee + token purchases
+        vm.deal(user1, 20 ether); // Increased from 1 ether
+        
+        uint256 projectId = factory.createRWAProject{value: CREATION_FEE}(
+            "Test RWA Token",
+            "TRWA",
             metadata,
             projectWallet,
-            10,
-            INITIAL_PRICE
+            15,
+            0.001 ether
         );
         
-        // Should fail with empty symbol
-        vm.expectRevert("Symbol required");
-        vm.prank(projectCreator);
-        factory.createRWAProject(
-            "Test Token",
-            "",
-            metadata,
-            projectWallet,
-            10,
-            INITIAL_PRICE
-        );
+        vm.stopPrank();
+        return projectId;
+    }
+    
+    function _setupTokenBalances(RWAFactory.RWAProject memory project, address user_1, address user_2) internal {
+        console.log("--- Setting up token balances ---");
+        RWAToken token = RWAToken(project.rwaToken);
+        RWAPrimarySales sales = RWAPrimarySales(project.primarySales);
         
-        // Should fail with zero address project wallet
-        vm.expectRevert("Invalid project wallet");
-        vm.prank(projectCreator);
-        factory.createRWAProject(
-            "Test Token",
-            "TEST",
-            metadata,
-            address(0),
-            10,
-            INITIAL_PRICE
-        );
+        console.log("Token address:", address(token));
+        console.log("Primary sales address:", address(sales));
+        console.log("Sales owner:", sales.owner());
+        console.log("User1 (caller):", user_1);
         
-        // Should fail with zero initial price
-        vm.expectRevert("Initial price required");
-        vm.prank(projectCreator);
-        factory.createRWAProject(
-            "Test Token",
-            "TEST",
-            metadata,
-            projectWallet,
-            10,
-            0
-        );
+        // Whitelist users
+        console.log("Whitelisting users...");
+        vm.startPrank(user_1);
+        address[] memory users = new address[](2);
+        users[0] = user_1;
+        users[1] = user_2;
+        
+        try sales.whitelistUsers(users, true) {
+            console.log("Users whitelisted successfully");
+        } catch Error(string memory reason) {
+            console.log("Whitelisting failed:", reason);
+            revert(reason);
+        }
+        vm.stopPrank();
+        
+        console.log("User1 whitelisted:", sales.whitelisted(user_1));
+        console.log("User2 whitelisted:", sales.whitelisted(user_2));
+        
+        // Users buy tokens
+        console.log("User1 purchasing tokens with 5 ETH...");
+        vm.startPrank(user_1);
+        console.log("User1 ETH balance:", user_1.balance);
+        console.log("Price per token:", sales.pricePerTokenETH());
+        console.log("Expected tokens from 5 ETH:", sales.getTokensForETH(5 ether));
+        
+        try sales.purchaseTokens{value: 5 ether}() {
+            console.log("User1 purchase successful");
+        } catch Error(string memory reason) {
+            console.log("User1 purchase failed:", reason);
+            revert(reason);
+        }
+        
+        uint256 user1TokenBalance = token.balanceOf(user_1);
+        console.log("User1 token balance after purchase:", user1TokenBalance);
+        vm.stopPrank();
+        
+        console.log("User2 purchasing tokens with 3 ETH...");
+        vm.startPrank(user_2);
+        console.log("User2 ETH balance:", user_2.balance);
+        console.log("Expected tokens from 3 ETH:", sales.getTokensForETH(3 ether));
+        
+        try sales.purchaseTokens{value: 3 ether}() {
+            console.log("User2 purchase successful");
+        } catch Error(string memory reason) {
+            console.log("User2 purchase failed:", reason);
+            revert(reason);
+        }
+        
+        uint256 user2TokenBalance = token.balanceOf(user_2);
+        console.log("User2 token balance after purchase:", user2TokenBalance);
+        vm.stopPrank();
+        
+        console.log("--- Token balance setup completed ---");
     }
 }
