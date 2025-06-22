@@ -28,8 +28,7 @@ contract RWAFactory is Ownable {
     uint256 public nextProjectId = 1;
     
     address public feeRecipient;
-    address public treasury;
-    uint256 public creationFee = 0.1 ether;
+    address public treasury; 
     
     event ProjectCreated(
         uint256 indexed projectId,
@@ -54,8 +53,7 @@ contract RWAFactory is Ownable {
         address projectWallet,
         uint256 projectAllocationPercent,
         uint256 pricePerTokenETH
-    ) external payable returns (uint256 projectId) {
-        require(msg.value >= creationFee, "Insufficient creation fee");
+    ) external returns (uint256 projectId) {
         require(bytes(name).length > 0, "Name required");
         require(bytes(symbol).length > 0, "Symbol required");
         require(projectWallet != address(0), "Invalid project wallet");
@@ -122,11 +120,6 @@ contract RWAFactory is Ownable {
         
         creatorProjects[msg.sender].push(projectId);
         
-        // Transfer creation fee
-        if (msg.value > 0) {
-            payable(treasury).transfer(msg.value);
-        }
-        
         emit ProjectCreated(
             projectId,
             msg.sender,
@@ -145,10 +138,6 @@ contract RWAFactory is Ownable {
     
     function getCreatorProjects(address creator) external view returns (uint256[] memory) {
         return creatorProjects[creator];
-    }
-    
-    function updateCreationFee(uint256 newFee) external onlyOwner {
-        creationFee = newFee;
     }
     
     function updateAddresses(address newFeeRecipient, address newTreasury) external onlyOwner {

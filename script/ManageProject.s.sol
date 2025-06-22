@@ -47,7 +47,7 @@ contract ManageProject is Script {
         investors[2] = 0x3456789012345678901234567890123456789012;
         
         sales.whitelistUsers(investors, true);
-        console.log("✅ Whitelisted", investors.length, "investors");
+        console.log("Whitelisted", investors.length, "investors");
         
         // 2. Update purchase limits (optional)
         console.log("2. Updating purchase limits...");
@@ -55,7 +55,7 @@ contract ManageProject is Script {
             0.1 ether,  // Min purchase: 0.1 ETH
             50 ether    // Max purchase: 50 ETH
         );
-        console.log("✅ Updated limits: 0.1 ETH min, 50 ETH max");
+        console.log("Updated limits: 0.1 ETH min, 50 ETH max");
         
         // 3. Check current sales status
         console.log("\n--- Sales Status ---");
@@ -66,17 +66,17 @@ contract ManageProject is Script {
         
         vm.stopBroadcast();
         
-        console.log("\n=== Management Complete ===");
-        console.log("✅ Investors whitelisted");
-        console.log("✅ Purchase limits updated");
-        console.log("✅ Project ready for primary sales");
+        console.log("=== Management Complete ===");
+        console.log("Investors whitelisted");
+        console.log("Purchase limits updated");
+        console.log("Project ready for primary sales");
         
-        console.log("\n=== Available Management Functions ===");
-        console.log("• sales.whitelistUsers(addresses[], true/false)");
-        console.log("• sales.updatePrice(newPriceWei)");
-        console.log("• sales.updateLimits(minWei, maxWei)");
-        console.log("• sales.pause() / sales.unpause()");
-        console.log("• token.updateAssetMetadata(newMetadata)");
-        console.log("• vault.distributeRewards{value: amount}(description)");
+        console.log("=== Available Management Functions ===");
+        console.log("sales.whitelistUsers(addresses[], true/false)");
+        console.log("sales.updatePrice(newPriceWei)");
+        console.log("sales.updateLimits(minWei, maxWei)");
+        console.log("sales.pause() / sales.unpause()");
+        console.log("token.updateAssetMetadata(newMetadata)");
+        console.log("vault.distributeRewards{value: amount}(description)");
     }
 }

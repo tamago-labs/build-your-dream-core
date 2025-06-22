@@ -21,12 +21,10 @@ contract DeployRWAFramework is Script {
         
         // Configuration
         address feeRecipient = deployer; // Can be changed later via updateAddresses
-        address treasury = deployer; // Can be changed later via updateAddresses
-        uint256 creationFee = 0.1 ether; // Default creation fee
+        address treasury = deployer; // Can be changed later via updateAddresses 
         
         console.log("Fee recipient:", feeRecipient);
-        console.log("Treasury:", treasury);
-        console.log("Creation fee:", creationFee / 1e18, "ETH");
+        console.log("Treasury:", treasury); 
         
         // Deploy Factory
         console.log("\n--- Deploying RWAFactory ---");
@@ -39,8 +37,7 @@ contract DeployRWAFramework is Script {
         console.log("RWAFactory deployed at:", address(factory));
         
         // Verify factory configuration
-        console.log("Factory owner:", factory.owner());
-        console.log("Factory creation fee:", factory.creationFee() / 1e18, "ETH");
+        console.log("Factory owner:", factory.owner()); 
         console.log("Factory fee recipient:", factory.feeRecipient());
         console.log("Factory treasury:", factory.treasury());
         
@@ -53,10 +50,9 @@ contract DeployRWAFramework is Script {
         vm.stopBroadcast();
         
         console.log("\n=== Deployment Summary ===");
-        console.log("✅ RWAFactory:", address(factory));
-        console.log("✅ RWADashboard:", address(dashboard));
-        console.log("✅ Creation fee:", creationFee / 1e18, "ETH");
-        console.log("✅ Next project ID:", factory.nextProjectId());
+        console.log("RWAFactory:", address(factory));
+        console.log("RWADashboard:", address(dashboard)); 
+        console.log("Next project ID:", factory.nextProjectId());
         
         console.log("\n=== Next Steps ===");
         console.log("1. Verify contracts on explorer");
@@ -72,11 +68,10 @@ contract DeployRWAFramework is Script {
             "Block: ", vm.toString(block.number), "\n",
             "Deployer: ", vm.toString(deployer), "\n",
             "Factory: ", vm.toString(address(factory)), "\n",
-            "Dashboard: ", vm.toString(address(dashboard)), "\n",
-            "Creation Fee: ", vm.toString(creationFee), " wei\n"
+            "Dashboard: ", vm.toString(address(dashboard)), "\n"
         ));
         
         vm.writeFile("deployment.txt", deploymentInfo);
-        console.log("\n📄 Deployment info saved to deployment.txt");
+        console.log("Deployment info saved to deployment.txt");
     }
 }

@@ -18,10 +18,8 @@ contract CreateProject is Script {
         console.log("Creator:", deployer);
         console.log("Creator balance:", deployer.balance / 1e18, "ETH");
         
-        RWAFactory factory = RWAFactory(factoryAddress);
-        uint256 creationFee = factory.creationFee();
-        
-        require(deployer.balance >= creationFee, "Insufficient ETH for creation fee");
+        RWAFactory factory = RWAFactory(factoryAddress); 
+         
         
         vm.startBroadcast(deployerPrivateKey);
         
@@ -36,10 +34,9 @@ contract CreateProject is Script {
         
         console.log("\n--- Project Configuration ---");
         console.log("Asset Type:", metadata.assetType);
-        console.log("Asset Value: $", metadata.totalValue / 1e8);
-        console.log("Creation Fee:", creationFee / 1e18, "ETH");
+        console.log("Asset Value: $", metadata.totalValue / 1e8); 
         
-        uint256 projectId = factory.createRWAProject{value: creationFee}(
+        uint256 projectId = factory.createRWAProject(
             "Manhattan Tower REIT",     // Token name
             "MHTNRT",                  // Token symbol  
             metadata,                  // Asset metadata
@@ -51,16 +48,16 @@ contract CreateProject is Script {
         vm.stopBroadcast();
         
         console.log("\n=== Project Created Successfully! ===");
-        console.log("✅ Project ID:", projectId);
+        console.log("Project ID:", projectId);
         
         // Get project details
         RWAFactory.RWAProject memory project = factory.getProject(projectId);
-        console.log("✅ RWA Token:", project.rwaToken);
-        console.log("✅ Primary Sales:", project.primarySales);
-        console.log("✅ RFQ Market:", project.rfq);
-        console.log("✅ Staking Vault:", project.vault);
-        console.log("✅ Project Creator:", project.creator);
-        console.log("✅ Is Active:", project.isActive);
+        console.log("RWA Token:", project.rwaToken);
+        console.log("Primary Sales:", project.primarySales);
+        console.log("RFQ Market:", project.rfq);
+        console.log("Staking Vault:", project.vault);
+        console.log("Project Creator:", project.creator);
+        console.log("Is Active:", project.isActive);
         
         // Token details
         RWAToken token = RWAToken(project.rwaToken);
@@ -84,9 +81,9 @@ contract CreateProject is Script {
         ));
         
         vm.writeFile("project.txt", projectInfo);
-        console.log("\n📄 Project info saved to project.txt");
+        console.log("Project info saved to project.txt");
         
-        console.log("\n=== Next Steps ===");
+        console.log("=== Next Steps ===");
         console.log("1. Whitelist investors for primary sales");
         console.log("2. Start primary token sales");
         console.log("3. Enable secondary trading via RFQ");

@@ -20,8 +20,7 @@ contract RWAIntegrationTest is Test {
     address public projectWallet = address(0x4);
     address public user1 = address(0x5);
     address public user2 = address(0x6);
-    
-    uint256 public constant CREATION_FEE = 0.1 ether;
+     
     
     function setUp() public {
         vm.startPrank(owner);
@@ -49,7 +48,7 @@ contract RWAIntegrationTest is Test {
         vm.startPrank(user1);
         vm.deal(user1, 1 ether);
         
-        uint256 projectId = factory.createRWAProject{value: CREATION_FEE}(
+        uint256 projectId = factory.createRWAProject(
             "NYC Real Estate Token",
             "NYCRE",
             metadata,
@@ -317,10 +316,9 @@ contract RWAIntegrationTest is Test {
         _createTestProject();
         _createTestProject();
         
-        (uint256 totalProjects, uint256 creationFee, address feeRec, address treas) = dashboard.getFactoryStats();
+        (uint256 totalProjects,  address feeRec, address treas) = dashboard.getFactoryStats();
         
-        assertEq(totalProjects, 2);
-        assertEq(creationFee, CREATION_FEE);
+        assertEq(totalProjects, 2); 
         assertEq(feeRec, feeRecipient);
         assertEq(treas, treasury);
     }
@@ -338,7 +336,7 @@ contract RWAIntegrationTest is Test {
         // Give user1 enough ETH for creation fee + token purchases
         vm.deal(user1, 20 ether); // Increased from 1 ether
         
-        uint256 projectId = factory.createRWAProject{value: CREATION_FEE}(
+        uint256 projectId = factory.createRWAProject(
             "Test RWA Token",
             "TRWA",
             metadata,

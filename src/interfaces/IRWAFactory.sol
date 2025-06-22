@@ -35,8 +35,7 @@ interface IRWAFactory {
     function getProject(uint256 projectId) external view returns (RWAProject memory);
     function getCreatorProjects(address creator) external view returns (uint256[] memory);
     
-    // Management
-    function updateCreationFee(uint256 newFee) external;
+    // Management 
     function updateAddresses(address newFeeRecipient, address newTreasury) external;
     function deactivateProject(uint256 projectId) external;
     
@@ -45,8 +44,7 @@ interface IRWAFactory {
     function creatorProjects(address creator, uint256 index) external view returns (uint256);
     function nextProjectId() external view returns (uint256);
     function feeRecipient() external view returns (address);
-    function treasury() external view returns (address);
-    function creationFee() external view returns (uint256);
+    function treasury() external view returns (address); 
     
     // Events
     event ProjectCreated(

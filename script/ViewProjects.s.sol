@@ -19,23 +19,22 @@ contract ViewProjects is Script {
         RWADashboard dashboard = RWADashboard(dashboardAddress);
         
         // Get factory stats
-        (uint256 totalProjects, uint256 creationFee, address feeRecipient, address treasury) = dashboard.getFactoryStats();
+        (uint256 totalProjects, address feeRecipient, address treasury) = dashboard.getFactoryStats();
         
         console.log("\n--- Factory Statistics ---");
         console.log("Total Projects:", totalProjects);
-        console.log("Creation Fee:", creationFee / 1e18, "ETH");
         console.log("Fee Recipient:", feeRecipient);
         console.log("Treasury:", treasury);
         
         if (totalProjects == 0) {
-            console.log("\n📝 No projects created yet. Use CreateProject.s.sol to create your first project!");
+            console.log("No projects created yet. Use CreateProject.s.sol to create your first project!");
             return;
         }
         
         // Show all projects
         console.log("\n--- All Projects ---");
         for (uint256 i = 1; i <= totalProjects; i++) {
-            console.log("\n🏗️ Project", i, ":");
+            console.log("Project", i, ":");
             
             try dashboard.getProjectOverview(i) returns (RWADashboard.ProjectOverview memory overview) {
                 console.log("  Name:", overview.name);
@@ -55,14 +54,14 @@ contract ViewProjects is Script {
                 
                 // Get project addresses
                 (address rwaToken, address primarySales, address rfq, address vault) = dashboard.getProjectAddresses(i);
-                console.log("  📍 Addresses:");
-                console.log("    Token:", rwaToken);
-                console.log("    Primary Sales:", primarySales);
-                console.log("    RFQ:", rfq);
-                console.log("    Vault:", vault);
+                console.log("Addresses:");
+                console.log("Token:", rwaToken);
+                console.log("Primary Sales:", primarySales);
+                console.log("RFQ:", rfq);
+                console.log("Vault:", vault);
                 
             } catch {
-                console.log("  ❌ Error fetching project overview");
+                console.log("Error fetching project overview");
             }
         }
         

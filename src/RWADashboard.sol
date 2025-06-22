@@ -188,13 +188,11 @@ contract RWADashboard {
      * @notice Get factory statistics
      */
     function getFactoryStats() external view returns (
-        uint256 totalProjects,
-        uint256 creationFee,
+        uint256 totalProjects, 
         address feeRecipient,
         address treasury
     ) {
-        totalProjects = factory.nextProjectId() - 1;
-        creationFee = factory.creationFee();
+        totalProjects = factory.nextProjectId() - 1; 
         feeRecipient = factory.feeRecipient();
         treasury = factory.treasury();
     }
