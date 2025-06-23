@@ -5,7 +5,10 @@ libs = ["lib"]
 via_ir = true
 fs_permissions = [{ access = "write", path = "./"}]
 optimizer = true
-optimizer_runs = 200
+optimizer_runs = 999999
+bytecode_hash = "none"
+gas_limit = 30_000_000
+gas_price = 25_000_000_000
 remappings = [
     "@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/",
     "forge-std/=lib/forge-std/src/"

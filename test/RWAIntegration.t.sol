@@ -121,10 +121,10 @@ contract RWAIntegrationTest is Test {
         console.log("User1 submitting sell quote...");
         vm.startPrank(user1);
         uint256 sellAmount = 1000 * 1e18;
-        uint256 pricePerToken = 0.002 ether;
+        uint256 sellPricePerToken = 0.002 ether;
         
         console.log("Sell amount:", sellAmount);
-        console.log("Price per token:", pricePerToken);
+        console.log("Price per token:", sellPricePerToken);
         
         if (user1Balance < sellAmount) {
             console.log("ERROR: User1 doesn't have enough tokens!");
@@ -140,7 +140,7 @@ contract RWAIntegrationTest is Test {
         try rfq.submitQuote(
             false, // selling
             sellAmount,
-            pricePerToken,
+            sellPricePerToken,
             1 hours,
             "Selling 1000 tokens"
         ) {
@@ -174,7 +174,7 @@ contract RWAIntegrationTest is Test {
         console.log("User2 accepting quote...");
         vm.startPrank(user2);
         uint256 user2BalanceBefore = token.balanceOf(user2);
-        uint256 totalCost = (sellAmount * pricePerToken) / 1e18;
+        uint256 totalCost = (sellAmount * sellPricePerToken) / 1e18;
         
         console.log("Total cost for user2:", totalCost);
         console.log("User2 ETH balance:", user2.balance);
