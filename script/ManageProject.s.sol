@@ -9,7 +9,16 @@ import "../src/RWAToken.sol";
 contract ManageProject is Script {
     
     function run() external {
-        uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
+        string memory privateKeyString = vm.envString("PRIVATE_KEY");
+        uint256 deployerPrivateKey;
+        
+        // Handle private key with or without 0x prefix
+        if (bytes(privateKeyString)[0] == '0' && bytes(privateKeyString)[1] == 'x') {
+            deployerPrivateKey = vm.parseUint(privateKeyString);
+        } else {
+            deployerPrivateKey = vm.parseUint(string(abi.encodePacked("0x", privateKeyString)));
+        }
+        
         address deployer = vm.addr(deployerPrivateKey);
         
         address factoryAddress = vm.envAddress("FACTORY_ADDRESS");

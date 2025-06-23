@@ -21,7 +21,7 @@ contract ViewProjects is Script {
         RWADashboard dashboard = RWADashboard(dashboardAddress);
         
         // Get factory stats
-        (uint256 totalProjects,   address feeRecipient, address treasury) = dashboard.getFactoryStats();
+        (uint256 totalProjects,  address feeRecipient, address treasury) = dashboard.getFactoryStats();
         
         console.log("\n--- Factory Statistics ---");
         console.log("Total Projects:", totalProjects); 

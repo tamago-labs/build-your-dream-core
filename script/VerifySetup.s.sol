@@ -34,7 +34,16 @@ contract VerifySetup is Script {
             console.log("WARNING: DASHBOARD_ADDRESS not set (normal if not deployed yet)");
         }
         
-        try vm.envUint("PRIVATE_KEY") returns (uint256 pk) {
+        try vm.envString("PRIVATE_KEY") returns (string memory privateKeyString) {
+            uint256 pk;
+            
+            // Handle private key with or without 0x prefix
+            if (bytes(privateKeyString)[0] == '0' && bytes(privateKeyString)[1] == 'x') {
+                pk = vm.parseUint(privateKeyString);
+            } else {
+                pk = vm.parseUint(string(abi.encodePacked("0x", privateKeyString)));
+            }
+            
             address deployer = vm.addr(pk);
             console.log("SUCCESS: PRIVATE_KEY configured");
             console.log("   Deployer address:", deployer);
