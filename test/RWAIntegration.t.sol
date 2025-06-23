@@ -19,8 +19,7 @@ contract RWAIntegrationTest is Test {
     address public feeRecipient = address(0x3);
     address public projectWallet = address(0x4);
     address public user1 = address(0x5);
-    address public user2 = address(0x6);
-     
+    address public user2 = address(0x6); 
     
     function setUp() public {
         vm.startPrank(owner);
@@ -333,7 +332,7 @@ contract RWAIntegrationTest is Test {
         });
         
         vm.startPrank(user1);
-        // Give user1 enough ETH for creation fee + token purchases
+        // Give user1 enough ETH for token purchases
         vm.deal(user1, 20 ether); // Increased from 1 ether
         
         uint256 projectId = factory.createRWAProject(

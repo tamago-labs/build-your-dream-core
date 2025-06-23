@@ -2,11 +2,6 @@
 
 echo "🚀 Setting up RWA Platform..."
 
-# Remove Counter.sol if it exists
-if [ -f "src/Counter.sol" ]; then
-    echo "Removing template Counter.sol..."
-    rm src/Counter.sol
-fi
 
 # Install dependencies
 echo "📦 Installing OpenZeppelin contracts..."

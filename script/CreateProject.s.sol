@@ -13,22 +13,24 @@ contract CreateProject is Script {
         
         address factoryAddress = vm.envAddress("FACTORY_ADDRESS");
         
-        console.log("=== Creating RWA Project ===");
+        console.log("=== Creating RWA Project on Avalanche Fuji ===");
         console.log("Factory:", factoryAddress);
         console.log("Creator:", deployer);
-        console.log("Creator balance:", deployer.balance / 1e18, "ETH");
+        console.log("Creator balance:", deployer.balance / 1e18, "AVAX");
+        console.log("Chain ID:", block.chainid);
+        
+        require(block.chainid == 43113, "Must be on Avalanche Fuji Testnet (Chain ID: 43113)");
         
         RWAFactory factory = RWAFactory(factoryAddress); 
-         
         
         vm.startBroadcast(deployerPrivateKey);
         
         // Example: Luxury Real Estate Project
         RWAToken.AssetMetadata memory metadata = RWAToken.AssetMetadata({
             assetType: "real-estate",
-            description: "Premium office building in downtown Manhattan. 50-story tower with 100% occupancy rate, premium tenants including Fortune 500 companies. Professional property management with 15-year average lease terms.",
-            totalValue: 150_000_000 * 1e8, // $150M USD with 8 decimals
-            url: "https://example.com/manhattan-tower",
+            description: "Premium ski resort property in Whistler, Canada. 200-unit luxury condominium complex with year-round rental income from vacation rentals and long-term leases. Professional property management with average 85% occupancy rate.",
+            totalValue: 120_000_000 * 1e8, // $120M USD with 8 decimals
+            url: "https://example.com/whistler-resort",
             createdAt: 0 // Will be set by contract
         });
         
@@ -37,27 +39,27 @@ contract CreateProject is Script {
         console.log("Asset Value: $", metadata.totalValue / 1e8); 
         
         uint256 projectId = factory.createRWAProject(
-            "Manhattan Tower REIT",     // Token name
-            "MHTNRT",                  // Token symbol  
+            "Whistler Resort Token",    // Token name
+            "WHSTLR",                  // Token symbol  
             metadata,                  // Asset metadata
             deployer,                  // Project wallet (receives project allocation)
-            20,                        // 20% allocation to project, 80% for sales
-            0.00015 ether              // 0.00015 ETH per token (~$150M / 1B tokens = $0.15 per token)
+            25,                        // 25% allocation to project, 75% for sales
+            0.00012 ether              // 0.00012 AVAX per token (~$120M / 1B tokens = $0.12 per token)
         );
         
         vm.stopBroadcast();
         
         console.log("\n=== Project Created Successfully! ===");
-        console.log("Project ID:", projectId);
+        console.log("SUCCESS: Project ID:", projectId);
         
         // Get project details
         RWAFactory.RWAProject memory project = factory.getProject(projectId);
-        console.log("RWA Token:", project.rwaToken);
-        console.log("Primary Sales:", project.primarySales);
-        console.log("RFQ Market:", project.rfq);
-        console.log("Staking Vault:", project.vault);
-        console.log("Project Creator:", project.creator);
-        console.log("Is Active:", project.isActive);
+        console.log("SUCCESS: RWA Token:", project.rwaToken);
+        console.log("SUCCESS: Primary Sales:", project.primarySales);
+        console.log("SUCCESS: RFQ Market:", project.rfq);
+        console.log("SUCCESS: Staking Vault:", project.vault);
+        console.log("SUCCESS: Project Creator:", project.creator);
+        console.log("SUCCESS: Is Active:", project.isActive);
         
         // Token details
         RWAToken token = RWAToken(project.rwaToken);
@@ -67,26 +69,30 @@ contract CreateProject is Script {
         console.log("Total Supply:", token.totalSupply() / 1e18);
         console.log("Market Cap: $", token.getMarketCap() / 1e8);
         console.log("Price per Token: $", token.getPricePerToken() / 1e8 / 1e18);
+        console.log("View on Snowtrace: https://testnet.snowtrace.io/address/", address(token));
         
         // Save project info
         string memory projectInfo = string(abi.encodePacked(
-            "RWA Project Created\n",
-            "===================\n",
+            "RWA Project Created - Avalanche Fuji\n",
+            "====================================\n",
             "Project ID: ", vm.toString(projectId), "\n",
             "Token: ", vm.toString(project.rwaToken), "\n",
             "Primary Sales: ", vm.toString(project.primarySales), "\n",
             "RFQ: ", vm.toString(project.rfq), "\n",
             "Vault: ", vm.toString(project.vault), "\n",
-            "Creator: ", vm.toString(project.creator), "\n"
+            "Creator: ", vm.toString(project.creator), "\n",
+            "Chain ID: ", vm.toString(block.chainid), "\n",
+            "Explorer: https://testnet.snowtrace.io/\n"
         ));
         
         vm.writeFile("project.txt", projectInfo);
-        console.log("Project info saved to project.txt");
+        console.log("\nProject info saved to project.txt");
         
-        console.log("=== Next Steps ===");
+        console.log("\n=== Next Steps ===");
         console.log("1. Whitelist investors for primary sales");
         console.log("2. Start primary token sales");
         console.log("3. Enable secondary trading via RFQ");
         console.log("4. Distribute real-world asset yields via vault");
+        console.log("5. Monitor project via Snowtrace explorer");
     }
 }

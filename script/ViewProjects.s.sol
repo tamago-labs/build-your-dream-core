@@ -11,30 +11,32 @@ contract ViewProjects is Script {
         address factoryAddress = vm.envAddress("FACTORY_ADDRESS");
         address dashboardAddress = vm.envAddress("DASHBOARD_ADDRESS");
         
-        console.log("=== RWA Framework Status ===");
+        console.log("=== RWA Framework Status - Avalanche Fuji ===");
         console.log("Factory:", factoryAddress);
         console.log("Dashboard:", dashboardAddress);
+        console.log("Chain ID:", block.chainid);
+        console.log("Explorer: https://testnet.snowtrace.io/");
         
         RWAFactory factory = RWAFactory(factoryAddress);
         RWADashboard dashboard = RWADashboard(dashboardAddress);
         
         // Get factory stats
-        (uint256 totalProjects, address feeRecipient, address treasury) = dashboard.getFactoryStats();
+        (uint256 totalProjects,   address feeRecipient, address treasury) = dashboard.getFactoryStats();
         
         console.log("\n--- Factory Statistics ---");
-        console.log("Total Projects:", totalProjects);
+        console.log("Total Projects:", totalProjects); 
         console.log("Fee Recipient:", feeRecipient);
         console.log("Treasury:", treasury);
         
         if (totalProjects == 0) {
-            console.log("No projects created yet. Use CreateProject.s.sol to create your first project!");
+            console.log("\nNo projects created yet. Use CreateProject.s.sol to create your first project!");
             return;
         }
         
         // Show all projects
         console.log("\n--- All Projects ---");
         for (uint256 i = 1; i <= totalProjects; i++) {
-            console.log("Project", i, ":");
+            console.log("\nProject", i, ":");
             
             try dashboard.getProjectOverview(i) returns (RWADashboard.ProjectOverview memory overview) {
                 console.log("  Name:", overview.name);
@@ -49,19 +51,19 @@ contract ViewProjects is Script {
                 console.log("  Total Sold:", overview.totalSold / 1e18);
                 console.log("  Sales Price:", overview.salesPriceETH, "wei");
                 console.log("  Total Staked:", overview.totalStaked / 1e18);
-                console.log("  Rewards Distributed:", overview.totalRewardsDistributed / 1e18, "ETH");
+                console.log("  Rewards Distributed:", overview.totalRewardsDistributed / 1e18, "AVAX");
                 console.log("  Active Quotes:", overview.activeQuotesCount);
                 
                 // Get project addresses
                 (address rwaToken, address primarySales, address rfq, address vault) = dashboard.getProjectAddresses(i);
-                console.log("Addresses:");
-                console.log("Token:", rwaToken);
-                console.log("Primary Sales:", primarySales);
-                console.log("RFQ:", rfq);
-                console.log("Vault:", vault);
+                console.log("  Addresses:");
+                console.log("    Token:", rwaToken);
+                console.log("    Primary Sales:", primarySales);
+                console.log("    RFQ:", rfq);
+                console.log("    Vault:", vault);
                 
             } catch {
-                console.log("Error fetching project overview");
+                console.log("  ERROR: Error fetching project overview");
             }
         }
         

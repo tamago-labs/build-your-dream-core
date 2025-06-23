@@ -47,15 +47,15 @@ contract ManageProject is Script {
         investors[2] = 0x3456789012345678901234567890123456789012;
         
         sales.whitelistUsers(investors, true);
-        console.log("Whitelisted", investors.length, "investors");
+        console.log("SUCCESS: Whitelisted", investors.length, "investors");
         
         // 2. Update purchase limits (optional)
         console.log("2. Updating purchase limits...");
         sales.updateLimits(
-            0.1 ether,  // Min purchase: 0.1 ETH
-            50 ether    // Max purchase: 50 ETH
+            0.1 ether,  // Min purchase: 0.1 AVAX
+            50 ether    // Max purchase: 50 AVAX
         );
-        console.log("Updated limits: 0.1 ETH min, 50 ETH max");
+        console.log("SUCCESS: Updated limits: 0.1 AVAX min, 50 AVAX max");
         
         // 3. Check current sales status
         console.log("\n--- Sales Status ---");
@@ -66,12 +66,12 @@ contract ManageProject is Script {
         
         vm.stopBroadcast();
         
-        console.log("=== Management Complete ===");
-        console.log("Investors whitelisted");
-        console.log("Purchase limits updated");
-        console.log("Project ready for primary sales");
+        console.log("\n=== Management Complete ===");
+        console.log("SUCCESS: Investors whitelisted");
+        console.log("SUCCESS: Purchase limits updated");
+        console.log("SUCCESS: Project ready for primary sales");
         
-        console.log("=== Available Management Functions ===");
+        console.log("\n=== Available Management Functions ===");
         console.log("sales.whitelistUsers(addresses[], true/false)");
         console.log("sales.updatePrice(newPriceWei)");
         console.log("sales.updateLimits(minWei, maxWei)");
